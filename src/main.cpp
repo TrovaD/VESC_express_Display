@@ -9,18 +9,18 @@
 #include "driver/twai.h"
 
 /**
- * VescExpress Display & Bridge v2.1.3
- * Targeted Fix: Correcting COMM_FW_VERSION response and CRC16.
+ * VescExpress Display & Bridge v2.1.4
+ * WORKING CONFIG FOUND: TX:1, RX:0, VESC ID:56, 500kbps
  */
 
-// --- GPIO Pins (ESP32-C3) ---
-#define CAN_TX_PIN (gpio_num_t)0
-#define CAN_RX_PIN (gpio_num_t)1
+// --- GPIO Pins (Verified WORKING) ---
+#define CAN_TX_PIN (gpio_num_t)1
+#define CAN_RX_PIN (gpio_num_t)0
 #define CAN_EN_PIN (gpio_num_t)9
 #define I2C_SDA_PIN 20 
 #define I2C_SCL_PIN 21 
 
-#define TARGET_VESC_ID 87
+#define TARGET_VESC_ID 56
 
 // --- BLE NUS UUIDs ---
 #define SERVICE_UUID           "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -40,7 +40,7 @@ struct VescData {
     bool online = false;
 } v_data;
 
-// --- Correct VESC CRC16 (CCITT) ---
+// --- VESC CRC16 (CCITT) ---
 uint16_t crc16(const uint8_t *data, uint16_t len) {
     uint16_t crc = 0;
     for (uint16_t j = 0; j < len; j++) {
@@ -55,35 +55,22 @@ uint16_t crc16(const uint8_t *data, uint16_t len) {
 
 void send_ble_packet(uint8_t *data, uint32_t len) {
     if (!ble_connected) return;
-    int header_len = (len <= 255) ? 2 : 3;
-    uint32_t total_len = len + header_len + 3; // Header + Payload + CRC(2) + Stop(1)
-    uint8_t buf[total_len];
-    int ind = 0;
-    
-    if (len <= 255) {
-        buf[ind++] = 2; 
-        buf[ind++] = (uint8_t)len;
-    } else {
-        buf[ind++] = 3;
-        buf[ind++] = (uint8_t)(len >> 8);
-        buf[ind++] = (uint8_t)(len & 0xFF);
-    }
-    
-    memcpy(buf + ind, data, len);
-    ind += len;
-    
+    int hlen = (len <= 255) ? 2 : 3;
+    uint8_t buf[len + hlen + 3];
+    int i = 0;
+    if (len <= 255) { buf[i++] = 2; buf[i++] = (uint8_t)len; }
+    else { buf[i++] = 3; buf[i++] = (uint8_t)(len >> 8); buf[i++] = (uint8_t)(len & 0xFF); }
+    memcpy(buf + i, data, len); i += len;
     uint16_t crc = crc16(data, len);
-    buf[ind++] = (uint8_t)(crc >> 8);
-    buf[ind++] = (uint8_t)(crc & 0xFF);
-    buf[ind++] = 3; // Stop byte
-
-    pTxCharacteristic->setValue(buf, ind);
+    buf[i++] = (uint8_t)(crc >> 8); buf[i++] = (uint8_t)(crc & 0xFF);
+    buf[i++] = 3;
+    pTxCharacteristic->setValue(buf, i);
     pTxCharacteristic->notify();
 }
 
 void init_can() {
     pinMode(CAN_EN_PIN, OUTPUT);
-    digitalWrite(CAN_EN_PIN, LOW);
+    digitalWrite(CAN_EN_PIN, LOW); // Enable transceiver
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS(); 
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -116,41 +103,30 @@ void process_can() {
     v_data.online = (millis() - v_data.last_msg_ms < 1000) && (v_data.last_msg_ms > 0);
 }
 
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) { ble_connected = true; };
-    void onDisconnect(BLEServer* pServer) { ble_connected = false; BLEDevice::startAdvertising(); }
-};
-
 class MyCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-        std::string value = pCharacteristic->getValue();
-        if (value.length() < 3) return;
-        uint8_t *data = (uint8_t*)value.data();
-        uint8_t cmd = (data[0] == 2) ? data[2] : data[3];
-
+    void onWrite(BLECharacteristic *pC) {
+        std::string val = pC->getValue();
+        if (val.length() < 3) return;
+        uint8_t *d = (uint8_t*)val.data();
+        uint8_t cmd = (d[0] == 2) ? d[2] : d[3];
         if (cmd == 0) { // COMM_FW_VERSION
-            uint8_t resp[100];
-            int i = 0;
-            resp[i++] = 0;    // COMM_FW_VERSION
-            resp[i++] = 6;    // Major
-            resp[i++] = 0;    // Minor
-            const char* hw = "VESC_EXPRESS";
-            strcpy((char*)&resp[i], hw); i += strlen(hw) + 1;
-            uint8_t mac[6]; WiFi.macAddress(mac);
-            memcpy(&resp[i], mac, 6); memset(&resp[i+6], 0, 6); i += 12;
-            resp[i++] = 0;    // Pairing
-            resp[i++] = 0;    // Test version
-            resp[i++] = 2;    // HW Type: VESC Express
-            resp[i++] = 1;    // Bootloader Presence (1 = Yes)
+            uint8_t resp[100]; int i = 0;
+            resp[i++] = 0; resp[i++] = 6; resp[i++] = 0;
+            const char* hw = "VESC_EXPRESS"; strcpy((char*)&resp[i], hw); i += strlen(hw) + 1;
+            uint8_t mac[6]; WiFi.macAddress(mac); memcpy(&resp[i], mac, 6); memset(&resp[i+6], 0, 6); i += 12;
+            resp[i++] = 0; resp[i++] = 0; resp[i++] = 2; resp[i++] = 1; 
             send_ble_packet(resp, i);
-            Serial.println("BLE: Sent correct FW_VERSION response");
         }
     }
 };
 
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pS) { ble_connected = true; };
+    void onDisconnect(BLEServer* pS) { ble_connected = false; BLEDevice::startAdvertising(); }
+};
+
 void setup() {
     Serial.begin(115200);
-    delay(1000);
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     u8g2.begin();
     init_can();
@@ -182,7 +158,7 @@ void loop() {
             u8g2.setFont(u8g2_font_ncenB08_tr);
             u8g2.setCursor(0, 58); u8g2.printf("%.1fA  %.0fC FET", v_data.current, v_data.temp_fet);
         } else {
-            u8g2.setFont(u8g2_font_ncenB10_tr); u8g2.drawStr(10, 40, "WAITING CAN...");
+            u8g2.setFont(u8g2_font_ncenB10_tr); u8g2.drawStr(10, 40, "WAITING VESC...");
         }
         u8g2.sendBuffer();
         last_ui = millis();

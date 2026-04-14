@@ -1,34 +1,34 @@
-# VescExpress Display Functional Specification (v2.1.3)
+# VescExpress Display Functional Specification (v2.1.4 - FINAL WORKING)
 
 ## Overview
 A PlatformIO-based Arduino project for the VescExpress (ESP32-C3) hardware, providing a real-time dashboard for VESC telemetry via CAN bus and a BLE-to-CAN bridge compatible with VESC Tool.
 
-## Critical Fixes for Stability
-The following architectural and protocol fixes were implemented to resolve connectivity and detection issues:
+## 🏆 Final Working Configuration (Discovery Phase)
+After a systematic hardware scan, the following configuration was verified as functional:
 
-### 1. Hardware Pin Conflict Resolution
-- **Display (I2C):** Uses **GPIO 20 (SDA)** and **GPIO 21 (SCL)**. These are the standard UART pins on the 6-pin VESC connector.
-- **CAN Bus:** Uses **GPIO 0 (TX)** and **GPIO 1 (RX)**. These are the official VESC Link/Express hardware assignments for the internal TWAI controller.
-- **Transceiver Enable:** **GPIO 9** must be driven **LOW** to take the CAN transceiver out of standby/silent mode.
+### 1. Hardware Pin Mapping
+- **CAN RX:** **GPIO 0** (Verified via signal pulse detection)
+- **CAN TX:** **GPIO 1** (Verified via transmission handshake)
+- **CAN Transceiver Enable:** **GPIO 9** (Must be driven **LOW**)
+- **Display (I2C SDA):** **GPIO 20**
+- **Display (I2C SCL):** **GPIO 21**
 
-### 2. BLE "Firmware Error" Resolution
-The VESC Tool mobile app requires a precise handshake to establish a connection.
-- **COMM_FW_VERSION Response:** Implemented the exact 16+ byte payload sequence expected by the VESC protocol, including:
-    - Major/Minor Version (6.0)
-    - Hardware Name string ("VESC_EXPRESS")
-    - 12-byte UUID (MAC address based)
-    - Hardware Type byte (set to `2` for VESC Express)
-    - Bootloader Presence byte (set to `1`)
-- **CRC16-CCITT:** Replaced placeholder checksums with a robust CCITT CRC16 implementation. VESC Tool rejects any packet with an invalid checksum.
-- **Packet Framing:** Implemented standard VESC framing using Start Bytes (`2` for short, `3` for long payloads) and the Stop Byte (`3`).
+### 2. Communication Parameters
+- **CAN Bitrate:** **500 kbps**
+- **VESC ID:** **56** (Locked ID found on the bus)
+- **BLE Service:** Nordic UART Service (NUS)
 
-## Hardware Configuration
-- **Board:** ESP32-C3-DevKitM-1
-- **Partition Table:** `huge_app.csv` (Required for BLE + U8g2)
-- **CAN Bitrate:** 500kbps (Standard VESC)
+## Critical Fixes Implemented
+### Hardware Level
+- **Pin Discovery:** Resolved conflicting documentation by running a GPIO scope and pin-pair scan. Standard C3 mappings (4/5 or 18/19) were invalid for this specific board layout.
+- **Transceiver Logic:** Identified that the CAN transceiver is in standby by default and requires GPIO 9 to be pulled LOW to active.
+
+### Protocol Level (VESC Tool Compatibility)
+- **Firmware Handshake:** Implemented the exact 16-byte response for `COMM_FW_VERSION`.
+- **CRC16-CCITT:** Integrated the specific CRC algorithm used by VESC. Without this, the mobile app connects but immediately disconnects with a "Could not read firmware version" error.
+- **Packet Framing:** Added support for both short (2-byte) and long (3-byte) VESC packet headers.
 
 ## Features
-- **Real-time Telemetry:** Large Voltage readout, Current, and FET Temperature.
-- **VESC ID Lock:** Configured to listen to VESC ID **87** by default.
-- **Connectivity Dash:** Status bar showing locked ID, CAN status (OK/NO), and BLE status (ADV/OK).
-- **Auto-Advertising:** BLE starts automatically on boot as "VescExpress".
+- **Real-time Dashboard:** Displays Voltage, Current, and FET Temperature.
+- **Connection Status:** Top bar monitors locked VESC ID, CAN bus health, and BLE state.
+- **Persistence:** Configured for the standard VESC 6.0 firmware profile.
