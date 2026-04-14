@@ -1,64 +1,51 @@
-# VescExpress Display & Bridge
+# VescExpress Display & Bridge (v2.2.2)
 
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Compatible-blue)
 ![ESP32-C3](https://img.shields.io/badge/Hardware-ESP32--C3-orange)
-![VESC](https://img.shields.io/badge/VESC-Compatible-green)
+![VESC](https://img.shields.io/badge/VESC-6.05%20Compatible-green)
 
-A high-performance real-time telemetry dashboard and BLE-to-CAN bridge for VESC motor controllers, specifically optimized for the **VescExpress (ESP32-C3)** hardware.
+A high-performance real-time telemetry dashboard and **bidirectional BLE-to-CAN bridge** for VESC motor controllers. This project is the result of a systematic hardware discovery process for the VescExpress (ESP32-C3).
 
-## 🚀 Overview
-This project transforms an ESP32-C3 into a dedicated dashboard for your e-vehicle. it provides:
-- **Live Telemetry:** Voltage, Current, and Temperature tracking.
-- **BLE Bridge:** Connect your phone's VESC Tool directly to the VESC via this dashboard.
-- **Plug & Play:** Auto-detects and locks onto active VESC IDs.
+## 🚩 Current Project State (Paused)
+As of v2.2.2, the project is stable and provides:
+- **Bidirectional Bridging:** VESC Tool can discover and configure VESCs on the CAN bus via this ESP32.
+- **Real-time UI:** Page 1 is functional, showing SoC (State of Charge) and Tachometer.
+- **Verified Hardware:** The exact pinout and transceiver logic for this specific board have been identified.
 
 ---
 
-## 🛠 Hardware Configuration
-The pinout for this project was verified through systematic hardware scanning to ensure compatibility with custom VescExpress board layouts.
-
+## 🛠 Verified Hardware Configuration
 | Component | Pin (GPIO) | Notes |
 | :--- | :--- | :--- |
-| **CAN RX** | 0 | Internal TWAI RX |
-| **CAN TX** | 1 | Internal TWAI TX |
-| **CAN EN** | 9 | Driven **LOW** to enable transceiver |
-| **I2C SDA** | 20 | Shared with UART-RX pin |
-| **I2C SCL** | 21 | Shared with UART-TX pin |
-
-**Display:** SSD1306 128x64 OLED via I2C.
+| **CAN RX** | 0 | TWAI RX |
+| **CAN TX** | 1 | TWAI TX |
+| **CAN EN** | 9 | Must be driven **LOW** |
+| **I2C SDA** | 20 | Shared with UART-RX |
+| **I2C SCL** | 21 | Shared with UART-TX |
 
 ---
 
 ## ✨ Key Features
-### 1. VESC Tool Compatibility
-Fixed the common "Could not read firmware version" error by implementing the full VESC handshake protocol and a hardware-accurate CRC16-CCITT checksum.
+### 1. BLE-to-CAN Bridge
+Implemented the VESC fragmentation protocol (`FILL_RX_BUFFER` / `PROCESS_RX_BUFFER`). Large configuration packets from the VESC Tool are split into CAN frames and forwarded to target IDs.
 
-### 2. Intelligent CAN Bus Monitoring
-- **Bitrate:** 500kbps (Standard).
-- **Auto-Detection:** Automatically identifies the VESC ID (e.g., ID 56) by listening to status frames.
-- **Bus Health:** Real-time monitoring of CAN state and error counters.
+### 2. VESC 6.05 Handshake
+Full compatibility with recent VESC Tool versions. The bridge responds locally to `COMM_FW_VERSION` with a complete 16-byte payload and `CRC16-CCITT` checksum to ensure established connections.
 
----
-
-## 💻 Installation
-1. Install [PlatformIO](https://platformio.org/).
-2. Clone this repository:
-   ```bash
-   git clone https://github.com/TrovaD/VESC_express_Display.git
-   ```
-3. Open the project in VSCode/PlatformIO.
-4. Connect your VescExpress via USB.
-5. Click **Upload**.
+### 3. Dashboard (Page 1)
+- **SoC Calculation:** Based on a 10S battery profile (configurable).
+- **Tachometer:** High-precision reassembly of 32-bit CAN frames.
+- **Connection Health:** monitors CAN bus and BLE state.
 
 ---
 
-## 📖 Wiki & Documentation
-Detailed documentation is available in the `docs/` folder:
+## 💻 Documentation Index
 - [Hardware Setup & Wiring](./docs/Hardware-Setup.md)
-- [VESC Protocol Handshake Details](./docs/Protocol-Details.md)
-- [Troubleshooting](./docs/Troubleshooting.md)
+- [VESC Bridge & Protocol Logic](./docs/Protocol-Details.md)
+- [Troubleshooting & Debugging](./docs/Troubleshooting.md)
+- [Functional Specification (Technical)](./FSD.md)
 
 ---
 
 ## ⚖ License
-This project is open-source. See the official VESC Express repository for upstream protocol licenses.
+Open-source. Derived from standard VESC communication protocols.
